@@ -21,13 +21,18 @@ namespace boost { namespace geometry { namespace index { namespace detail {
 #error "invalid value"
 #endif
 
+template <std::size_t I, typename Point>
+inline bool kd_less(Point const& l, Point const& r)
+{
+    // TODO use math::equals()?
+    // If yes, then this function may return pair<lesser, greater>
+    return geometry::get<I>(l) < geometry::get<I>(r);
+}
+
 template <typename Point, std::size_t I = 0>
 struct kd_sort_impl
 {
-    static inline bool less(Point const& l, Point const& r)
-    {
-        return geometry::get<I>(l) < geometry::get<I>(r);
-    }
+    static const std::size_t next_dimension = (I+1) % dimension<Point>::value;
 
     template <typename It>
     static inline void apply(It first, It last)
@@ -37,9 +42,8 @@ struct kd_sort_impl
         std::size_t rsize = size - lsize - 1;
         
         It nth = first + lsize;
-        std::nth_element(first, nth, last, less);
-        
-        static const std::size_t next_dimension = (I+1) % dimension<Point>::value;
+        std::nth_element(first, nth, last, kd_less<I, Point>);
+
         if ( lsize > BOOST_GEOMETRY_INDEX_DETAIL_KD_SORT_VALUES_MIN )
         {
             kd_sort_impl<Point, next_dimension>::apply(first, nth);
@@ -65,11 +69,6 @@ template <typename Point, std::size_t I = 0>
 struct kd_binary_search_impl
 {
     static const std::size_t next_dimension = (I+1) % dimension<Point>::value;
-
-    static inline bool less(Point const& l, Point const& r)
-    {
-        return geometry::get<I>(l) < geometry::get<I>(r);
-    }
 
     template <typename It, typename Value>
     static inline bool per_branch(It first, It last, Value const& value)
@@ -106,11 +105,11 @@ struct kd_binary_search_impl
         if ( size == 1 ) // probably not needed
             return false;
 
-        if ( less(value, *nth) )
+        if ( kd_less<I>(value, *nth) )
         {
             return per_branch(first, nth, value);
         }
-        else if ( less(*nth, value) )
+        else if ( kd_less<I>(*nth, value) )
         {
             return per_branch(nth+1, last, value);
         }
@@ -136,20 +135,6 @@ template <typename Point, std::size_t I = 0>
 struct kd_nearest_impl
 {
     static const std::size_t next_dimension = (I+1) % dimension<Point>::value;
-
-    static inline bool less(Point const& l, Point const& r)
-    {
-        return geometry::get<I>(l) < geometry::get<I>(r);
-    }
-
-    template <typename Result>
-    static inline Result comparable_distance(Point const& l, Point const& r)
-    {
-        Result temp = geometry::get<I>(l) > geometry::get<I>(r) ?
-                      geometry::get<I>(l) - geometry::get<I>(r) :
-                      geometry::get<I>(r) - geometry::get<I>(l);
-        return temp * temp;
-    }
 
     template <typename It, typename Value, typename CDist>
     static inline bool update_one(It it, Value const& point, It & out_it, CDist & smallest_cdist)
@@ -192,7 +177,9 @@ struct kd_nearest_impl
         CDist axis_cdist = geometry::get<I>(greater) - geometry::get<I>(smaller);
         axis_cdist *= axis_cdist;
 
-        return smallest_cdist < axis_cdist; // use math::equals?
+        // TODO use math::equals()?
+        // If it were used in the less() then not here
+        return smallest_cdist < axis_cdist;
     }
 
     template <typename It, typename Value, typename CDist>
@@ -205,7 +192,7 @@ struct kd_nearest_impl
         if ( update_one(nth, point, out_it, smallest_cdist) )
             return true;
 
-        if ( less(point, *nth) )
+        if ( kd_less<I>(point, *nth) )
         {
             if ( per_branch(first, nth, point, out_it, smallest_cdist) )
                 return true;
@@ -215,7 +202,7 @@ struct kd_nearest_impl
 
             return per_branch(nth+1, last, point, out_it, smallest_cdist);
         }
-        else if ( less(*nth, point) )
+        else if ( kd_less<I>(*nth, point) )
         {
             if ( per_branch(nth+1, last, point, out_it, smallest_cdist) )
                 return true;
