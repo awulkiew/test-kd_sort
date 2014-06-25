@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "kd_less.hpp"
+#include "kd_is_further.hpp"
 
 namespace boost { namespace geometry { namespace index { namespace detail {
 
@@ -35,7 +36,7 @@ struct kd_sort_impl
         std::size_t rsize = size - lsize - 1;
         
         It nth = first + lsize;
-        std::nth_element(first, nth, last, kd_less<I, Point>);
+        std::nth_element(first, nth, last, kd_less<I, Point, Point>);
 
         if ( lsize > BOOST_GEOMETRY_INDEX_DETAIL_KD_SORT_VALUES_MIN )
         {
@@ -168,17 +169,6 @@ struct kd_nearest_impl
         return false;
     }
 
-    template <typename Value, typename CDist>
-    static inline bool is_axis_further(Value const& smaller, Value const& greater, CDist & smallest_cdist)
-    {
-        CDist axis_cdist = geometry::get<I>(greater) - geometry::get<I>(smaller);
-        axis_cdist *= axis_cdist;
-
-        // TODO use math::equals()?
-        // If it were used in the less() then not here
-        return smallest_cdist < axis_cdist;
-    }
-
     template <typename It, typename Value, typename CDist>
     static inline bool apply(It first, It last, Value const& point, It & out_it, CDist & smallest_cdist)
     {
@@ -194,7 +184,7 @@ struct kd_nearest_impl
             if ( per_branch(first, nth, point, out_it, smallest_cdist) )
                 return true;
 
-            if ( is_axis_further(point, *nth, smallest_cdist) )
+            if ( kd_is_further<I>(point, *nth, smallest_cdist) )
                 return false;
 
             return per_branch(nth+1, last, point, out_it, smallest_cdist);
@@ -204,7 +194,7 @@ struct kd_nearest_impl
             if ( per_branch(nth+1, last, point, out_it, smallest_cdist) )
                 return true;
 
-            if ( is_axis_further(*nth, point, smallest_cdist) )
+            if ( kd_is_further<I>(*nth, point, smallest_cdist) )
                 return false;
 
             return per_branch(first, nth, point, out_it, smallest_cdist);
@@ -221,8 +211,8 @@ struct kd_nearest_impl
     }
 };
 
-template <typename RandomIt, typename Value>
-inline bool kd_nearest(RandomIt first, RandomIt last, Value const& point, Value & result)
+template <typename RandomIt, typename Point, typename Value>
+inline bool kd_nearest(RandomIt first, RandomIt last, Point const& point, Value & result)
 {
     if ( std::distance(first, last) < 1 )
         return false;

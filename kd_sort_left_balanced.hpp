@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include "kd_less.hpp"
+#include "kd_is_further.hpp"
 
 namespace boost { namespace geometry { namespace index { namespace detail {
 
@@ -51,7 +52,7 @@ struct kd_sort_left_balanced_impl
         std::size_t median = calc_median(start, stop);
         It median_it = first + (median - start);
 
-        std::nth_element(first, median_it, last, kd_less<I, Point>);
+        std::nth_element(first, median_it, last, kd_less<I, Point, Point>);
 
         *(out_first + (index - 1)) = *median_it;
 
@@ -129,17 +130,6 @@ struct kd_nearest_left_balanced_impl
                     ::apply(first, index, max_index, point, out_it, smallest_cdist);
     }
 
-    template <typename Value, typename CDist>
-    static inline bool is_axis_further(Value const& smaller, Value const& greater, CDist & smallest_cdist)
-    {
-        CDist axis_cdist = geometry::get<I>(greater) - geometry::get<I>(smaller);
-        axis_cdist *= axis_cdist;
-
-        // TODO use math::equals()?
-        // If it were used in the less() then not here
-        return smallest_cdist < axis_cdist;
-    }
-
     template <typename It, typename Value, typename CDist>
     static inline bool apply(It first,
                              std::size_t index, std::size_t const max_index,
@@ -164,7 +154,7 @@ struct kd_nearest_left_balanced_impl
             if ( next_index > max_index )
                 return false;
 
-            if ( is_axis_further(point, *nth, smallest_cdist) )
+            if ( kd_is_further<I>(point, *nth, smallest_cdist) )
                 return false;
 
             return per_branch(first, 2 * index + 1, max_index, point, out_it, smallest_cdist);
@@ -180,7 +170,7 @@ struct kd_nearest_left_balanced_impl
             if ( next_index > max_index )
                 return false;
 
-            if ( is_axis_further(*nth, point, smallest_cdist) )
+            if ( kd_is_further<I>(*nth, point, smallest_cdist) )
                 return false;
 
             return per_branch(first, 2 * index, max_index, point, out_it, smallest_cdist);
@@ -205,8 +195,8 @@ struct kd_nearest_left_balanced_impl
     }
 };
 
-template <typename RandomIt, typename Value>
-inline bool kd_nearest_left_balanced(RandomIt first, RandomIt last, Value const& point, Value & result)
+template <typename RandomIt, typename Point, typename Value>
+inline bool kd_nearest_left_balanced(RandomIt first, RandomIt last, Point const& point, Value & result)
 {
     typename boost::iterator_difference<RandomIt>::type
         d = std::distance(first, last);

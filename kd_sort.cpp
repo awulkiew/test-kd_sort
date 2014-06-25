@@ -7,6 +7,7 @@
 #include <boost/chrono.hpp>
 #include <boost/foreach.hpp>
 #include <boost/random.hpp>
+#include <boost/tuple/tuple.hpp>
 
 #include <boost/geometry.hpp>
 #include <boost/geometry/index/rtree.hpp>
@@ -14,10 +15,30 @@
 #include "kd_sort.hpp"
 #include "kd_sort_left_balanced.hpp"
 
+typedef boost::tuple<float, float, float, float> pt_data;
+
+namespace bg = boost::geometry;
+namespace bgi = bg::index;
+
+typedef bg::model::point<double, 2, bg::cs::cartesian> P;
+typedef bg::model::box<P> B;
+
+#ifndef TEST_BOXES
+typedef P V;
+P to_v(pt_data const& c)
+{
+    return P(boost::get<0>(c), boost::get<1>(c));
+}
+#else
+typedef B V;
+B to_v(pt_data const& c)
+{
+    return B(P(boost::get<0>(c), boost::get<1>(c)), P(boost::get<0>(c) + boost::get<2>(c), boost::get<1>(c) + boost::get<3>(c)));
+}
+#endif
+
 int main()
 {
-    namespace bg = boost::geometry;
-    namespace bgi = bg::index;
     typedef boost::chrono::thread_clock clock_t;
     typedef boost::chrono::duration<float> dur_t;
 
@@ -27,32 +48,30 @@ int main()
     size_t values_count = 100;
 #endif
 
-    std::vector< std::pair<float, float> > coords;
+    std::vector<pt_data> coords;
 
     //randomize values
     {
         boost::mt19937 rng;
         //rng.seed(static_cast<unsigned int>(std::time(0)));
-        boost::uniform_real<float> range(-1000, 1000);
-        boost::variate_generator<boost::mt19937&, boost::uniform_real<float> > rnd(rng, range);
+        boost::uniform_real<float> range_pos(-1000, 1000);
+        boost::variate_generator<boost::mt19937&, boost::uniform_real<float> > rnd_pos(rng, range_pos);
+        boost::uniform_real<float> range_size(10, 50);
+        boost::variate_generator<boost::mt19937&, boost::uniform_real<float> > rnd_size(rng, range_size);
 
         coords.reserve(values_count);
 
         std::cout << "randomizing data\n";
         for ( size_t i = 0 ; i < values_count ; ++i )
         {
-            coords.push_back(std::make_pair(rnd(), rnd()));
+            coords.push_back(boost::make_tuple(rnd_pos(), rnd_pos(), rnd_size(), rnd_size()));
         }
         std::cout << "randomized\n";
     }
 
-    typedef bg::model::point<double, 2, bg::cs::cartesian> P;
-
     for (;;)
     {
-        typedef std::pair<float, float> pt_data;
-
-        std::vector<P> v1, v2, v3;
+        std::vector<V> v1, v2, v3;
         
         {
             v1.reserve(values_count);
@@ -60,25 +79,27 @@ int main()
             v3.reserve(values_count);
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                v1.push_back(P(c.first, c.second));
-                v2.push_back(P(c.first, c.second));
-                v3.push_back(P(c.first, c.second));
+                v1.push_back(to_v(c));
+                v2.push_back(to_v(c));
+                v3.push_back(to_v(c));
             }
         }
 
         std::cout << "------------------------------------------------" << std::endl;
 
         clock_t::time_point start = clock_t::now();
-        bgi::rtree<P, bgi::linear<8> > rt(v1.begin(), v1.end());
+        bgi::rtree<V, bgi::linear<8> > rt(v1.begin(), v1.end());
         dur_t time = clock_t::now() - start;
         std::cout << time << " - rtree()" << std::endl;
 
+#ifndef TEST_BOXES
         {
             clock_t::time_point start = clock_t::now();
             std::sort(v1.begin(), v1.end(), bg::less<P>());
             dur_t time = clock_t::now() - start;
             std::cout << time << " - std::sort()" << std::endl;
         }
+#endif
 
         {
             clock_t::time_point start = clock_t::now();
@@ -101,7 +122,7 @@ int main()
             clock_t::time_point start = clock_t::now();
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                bool is = rt.count(P(c.first, c.second)) > 0;
+                bool is = rt.count(to_v(c)) > 0;
 
                 dummy += int(is);
             }
@@ -110,12 +131,13 @@ int main()
             std::cout << "dummy: " << dummy << std::endl;
         }
 
+#ifndef TEST_BOXES
         {
             std::size_t dummy = 0;
             clock_t::time_point start = clock_t::now();
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                bool is = std::binary_search(v1.begin(), v1.end(), P(c.first, c.second), bg::less<P>());
+                bool is = std::binary_search(v1.begin(), v1.end(), to_v(c), bg::less<P>());
 
                 dummy += int(is);
             }
@@ -123,13 +145,14 @@ int main()
             std::cout << time << " - std::binary_search()" << std::endl;
             std::cout << "dummy: " << dummy << std::endl;
         }
+#endif
 
         {
             std::size_t dummy = 0;
             clock_t::time_point start = clock_t::now();
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                bool is = bgi::detail::kd_binary_search(v2.begin(), v2.end(), P(c.first, c.second));
+                bool is = bgi::detail::kd_binary_search(v2.begin(), v2.end(), to_v(c));
 
                 dummy += int(is);
             }
@@ -145,8 +168,8 @@ int main()
             clock_t::time_point start = clock_t::now();
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                P p(c.first, 0);
-                P r;
+                P p(boost::get<0>(c), 0);
+                V r;
                 dummy += rt.query(bgi::nearest(p, 1), &r);
             }
             dur_t time = clock_t::now() - start;
@@ -159,8 +182,8 @@ int main()
             clock_t::time_point start = clock_t::now();
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                P p(c.first, 0);
-                P r;
+                P p(boost::get<0>(c), 0);
+                V r;
                 bool is = bgi::detail::kd_nearest(v2.begin(), v2.end(), p, r);
                 dummy += int(is);
             }
@@ -174,8 +197,8 @@ int main()
             clock_t::time_point start = clock_t::now();
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                P p(c.first, 0);
-                P r;
+                P p(boost::get<0>(c), 0);
+                V r;
                 bool is = bgi::detail::kd_nearest_left_balanced(v3.begin(), v3.end(), p, r);
                 dummy += int(is);
             }
@@ -189,8 +212,8 @@ int main()
         {
             BOOST_FOREACH(pt_data const& c, coords)
             {
-                P p(c.first, 0);
-                P p1, p2, p3;
+                P p(boost::get<0>(c), 0);
+                V p1, p2, p3;
                 bool r1 = rt.query(bgi::nearest(p, 1), &p1) > 0;
                 bool r2 = bgi::detail::kd_nearest(v2.begin(), v2.end(), p, p2);
                 bool r3 = bgi::detail::kd_nearest_left_balanced(v3.begin(), v3.end(), p, p3);
@@ -198,7 +221,9 @@ int main()
                 if ( r1 != r2
                   || bg::comparable_distance(p, p1) != bg::comparable_distance(p, p2) )
                 {
-                    std::cout << "nearest() and kd_nearest results not compatible!";
+                    std::cout << "nearest() and kd_nearest results not compatible!" << std::endl;
+                    std::cout << r1 << ' ' << r2 << std::endl;
+                    std::cout << bg::comparable_distance(p, p1) << ' ' << bg::comparable_distance(p, p2) << std::endl;
                     break;
                 }
 
@@ -206,10 +231,13 @@ int main()
                   || bg::comparable_distance(p, p1) != bg::comparable_distance(p, p3) )
                 {
                     std::cout << "nearest() and kd_nearest_left_balanced results not compatible!";
+                    std::cout << r1 << ' ' << r3 << std::endl;
+                    std::cout << bg::comparable_distance(p, p1) << ' ' << bg::comparable_distance(p, p3) << std::endl;
                     break;
                 }
             }
         }
+
     }
 
     return 0;
