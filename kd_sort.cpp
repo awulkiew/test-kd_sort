@@ -23,6 +23,17 @@ namespace bgi = bg::index;
 typedef bg::model::point<double, 2, bg::cs::cartesian> P;
 typedef bg::model::box<P> B;
 
+void print(P const& p)
+{
+    std::cout << bg::get<0>(p) << ", " <<  bg::get<1>(p);
+}
+
+void print(B const& b)
+{
+    std::cout << bg::get<bg::min_corner, 0>(b) << ", " <<  bg::get<bg::min_corner, 1>(b) << " x "
+              << bg::get<bg::max_corner, 0>(b) << ", " <<  bg::get<bg::max_corner, 1>(b);
+}
+
 #ifndef TEST_BOXES
 typedef P V;
 P to_v(pt_data const& c)
@@ -210,6 +221,7 @@ int main()
         std::cout << "------------------------------------------------" << std::endl;
 
         {
+            int errors = 0;
             BOOST_FOREACH(pt_data const& c, coords)
             {
                 P p(boost::get<0>(c), 0);
@@ -224,7 +236,10 @@ int main()
                     std::cout << "nearest() and kd_nearest results not compatible!" << std::endl;
                     std::cout << r1 << ' ' << r2 << std::endl;
                     std::cout << bg::comparable_distance(p, p1) << ' ' << bg::comparable_distance(p, p2) << std::endl;
-                    break;
+                    print(p); std::cout << std::endl;
+                    print(p1); std::cout << std::endl;
+                    print(p2); std::cout << std::endl;
+                    ++errors;
                 }
 
                 if ( r1 != r3
@@ -233,8 +248,14 @@ int main()
                     std::cout << "nearest() and kd_nearest_left_balanced results not compatible!";
                     std::cout << r1 << ' ' << r3 << std::endl;
                     std::cout << bg::comparable_distance(p, p1) << ' ' << bg::comparable_distance(p, p3) << std::endl;
-                    break;
+                    print(p); std::cout << std::endl;
+                    print(p1); std::cout << std::endl;
+                    print(p3); std::cout << std::endl;
+                    ++errors;
                 }
+
+                if ( errors > 10 )
+                    break;
             }
         }
 
